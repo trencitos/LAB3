@@ -1,0 +1,159 @@
+syntax = "proto3";
+
+package matchmaking;
+
+option go_package = "grpc-server/proto";
+
+service Matchmaker {
+    // Un jugador solicita unirse a la cola de emparejamiento.
+    rpc QueuePlayer(QueuePlayerRequest) returns (QueuePlayerResponse);
+
+    // Un jugador solicita su estado actual (IDLE, IN_QUEUE, IN_MATCH).
+    rpc GetPlayerStatus(PlayerStatusRequest) returns (PlayerStatusResponse);
+
+    // Un jugador se suscribe para recibir notificaciones cuando se le asigne una partida.
+    rpc StreamMatchNotifications(PlayerIdRequest) returns (stream MatchNotification);
+
+    rpc NotifyMatchEnded(MatchEndedRequest) returns (MatchEndedResponse);
+
+    // MÉTODOS PARA SERVIDORES DE PARTIDA (Game Servers) 
+    // Un servidor de partida se registra o actualiza su estado (DISPONIBLE, OCUPADO).
+    rpc UpdateServerStatus(ServerStatusUpdateRequest) returns (ServerStatusUpdateResponse);
+    
+
+    // MÉTODOS PARA EL CLIENTE ADMINISTRADOR (Admin Client)
+    // Un administrador solicita una vista completa del estado del sistema.
+    rpc AdminGetSystemStatus(AdminRequest) returns (SystemStatusResponse);
+
+    // Un administrador fuerza el estado de un servidor (ej: para recuperarlo de un estado CAIDO).
+    rpc AdminUpdateServerState(AdminServerUpdateRequest) returns (AdminUpdateResponse);
+}
+
+// Servicio expuesto por cada Servidor de Partida (GameServer).
+service GameServer {
+    // El Matchmaker llama a este método para ordenar a un servidor que inicie una partida.
+    rpc AssignMatch(AssignMatchRequest) returns (AssignMatchResponse);
+}
+
+// Mensajes Generales 
+message PlayerIdRequest {
+    string player_id = 1;
+}
+
+message MatchEndedRequest {
+  string match_id = 1;
+  repeated string player_ids = 2;
+  repeated int32 vector_clock = 3;
+}
+
+message MatchEndedResponse {
+  repeated int32 vector_clock = 1;
+}
+
+// Mensajes para el flujo de Jugadores 
+
+message QueuePlayerRequest {
+    string player_id = 1;
+    string game_mode_preference = 2; // ej: "1v1"
+    repeated int32 vector_clock = 3;
+}
+
+message QueuePlayerResponse {
+    enum StatusCode {
+        SUCCESS = 0;
+        FAILURE = 1;
+        ALREADY_IN_QUEUE = 2;
+    }
+    StatusCode status_code = 1;
+    string message = 2;
+    repeated int32 vector_clock = 3;
+}
+
+message PlayerStatusRequest {
+    string player_id = 1;
+    repeated int32 vector_clock = 2;
+}
+
+message PlayerStatusResponse {
+    string player_status = 1;
+    string match_id = 2;
+    string game_server_address = 3;
+    repeated int32 vector_clock = 4;
+}
+
+message MatchNotification {
+    string match_id = 1;
+    string game_server_address = 2;
+    repeated string player_ids = 3;
+    repeated int32 vector_clock = 4;
+}
+
+
+
+
+
+// Mensajes para el flujo de Servidores de Partida 
+
+message ServerStatusUpdateRequest {
+    string server_id = 1;
+    string new_status = 2;
+    string address = 3;
+    repeated int32 vector_clock = 4;
+}
+
+message ServerStatusUpdateResponse {
+    enum StatusCode {
+        OK = 0;
+    }
+    StatusCode status_code = 1;
+    repeated int32 vector_clock = 2;
+}
+
+message AssignMatchRequest {
+    string match_id = 1;
+    repeated string player_ids = 2;
+    repeated int32 vector_clock = 3;
+}
+
+message AssignMatchResponse {
+    enum StatusCode {
+        ACCEPTED = 0;
+        REJECTED_BUSY = 1;
+        REJECTED_CRASH = 2;
+    }
+    StatusCode status_code = 1;
+}
+
+
+
+
+// Mensajes para el Cliente Administrador 
+
+message AdminRequest {
+    // Vacío para una solicitud de estado simple.
+}
+
+message SystemStatusResponse {
+    message ServerState {
+        string server_id = 1;
+        string status = 2;
+        string address = 3;
+        string current_match_id = 4;
+    }
+    message PlayerQueueEntry {
+        string player_id = 1;
+        int64 time_in_queue_seconds = 2;
+    }
+    repeated ServerState servers = 1;
+    repeated PlayerQueueEntry player_queue = 2;
+    repeated int32 vector_clock = 3;
+}
+
+message AdminServerUpdateRequest {
+    string server_id = 1;
+    string new_forced_status = 2;
+}
+
+message AdminUpdateResponse {
+    string message = 1;
+}
